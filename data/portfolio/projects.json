@@ -1,0 +1,24 @@
+{
+  "refreshedAt": "2026-11-06",
+  "exportedAt": "2026-11-06T19:09:17+00:00",
+  "projects": [
+    {
+      "key": "AC",
+      "label": "Agent Creator",
+      "currentSprintId": 12135,
+      "file": "portfolio/AC.json"
+    },
+    {
+      "key": "PLATENG",
+      "label": "Platform Engineering",
+      "currentSprintId": 12230,
+      "file": "portfolio/PLATENG.json"
+    },
+    {
+      "key": "PLAT",
+      "label": "Plat Core",
+      "currentSprintId": 12189,
+      "file": "portfolio/PLAT.json"
+    }
+  ]
+}

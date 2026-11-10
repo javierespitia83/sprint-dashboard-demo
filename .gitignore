@@ -1,0 +1,31 @@
+# Secrets and local configuration
+.env
+.env.*
+
+# macOS / Google Drive / Finder artifacts ("Icon?" matches the Icon\r folder-icon files)
+.DS_Store
+._*
+Icon?
+.Spotlight-V100/
+.Trashes/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# Python byproducts (exporter helpers run from this folder)
+*.pyc
+__pycache__/
+
+# Acceptance harness scratch output, if a scratch dir is placed inside the repo
+/.acceptance/
+
+# Staging files used by other automation (not part of the app)
+/_stage/
+.claude/
+_n009fix/
+_to_delete/

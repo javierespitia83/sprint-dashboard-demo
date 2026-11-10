@@ -1,0 +1,596 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "af-dashboard-snapshot-export/snapshot.schema.json",
+  "title": "Dashboard snapshot (snapshots/sprint-<id>.json and backlog.json)",
+  "description": "Shared schema for the sprint snapshots (snapshots/sprint-<id>.json, active and frozen) and backlog.json, exported by export_dashboard_snapshots.py. The top level only requires the fields common to both files, which is what the exporter's minimal structural check reads (top-level 'required' and tickets.items 'required'). The exact ticket shapes are $defs/sprintTicket (sprint snapshots) and $defs/backlogTicket (backlog.json); tickets.items accepts either, and the acceptance harness validates each file strictly against its own shape. Sprint snapshots also carry a top-level 'sprint' object (added 2026-10-01) from the tracker's Sprint Metrics tab; backlog.json has none.",
+  "type": "object",
+  "required": [
+    "refreshedAt",
+    "source",
+    "tickets"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "refreshedAt": {
+      "type": "string",
+      "format": "date",
+      "description": "Local calendar date the snapshot was generated, YYYY-MM-DD. Kept separate from exportedAt for date-based dashboard calculations."
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional RFC 3339 timestamp with UTC offset recording when the exporter generated the snapshot. Older snapshots may omit it."
+    },
+    "source": {
+      "type": "string",
+      "description": "Which workbook and sheet this snapshot was derived from, e.g. '03_Team_Enablement/daily_tracker.xlsx · Daily'."
+    },
+    "tickets": {
+      "type": "array",
+      "description": "One object per row of the source sheet. Empty array is valid (e.g. an empty backlog).",
+      "items": {
+        "type": "object",
+        "required": [
+          "ticket"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The exact Jira ticket key (e.g. 'APP-123'), preserved verbatim. Never blank — rows with no ticket key are skipped by the exporter rather than exported with a null key."
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "points": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Story points. Always a JSON number (int or float) or null — never a numeric value encoded as a string."
+          },
+          "doneDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Sprint snapshots only. YYYY-MM-DD or null. Set only when the ticket's current status is Done; a non-null value on a non-Done ticket is a non-fatal exporter warning, not a schema violation."
+          },
+          "addedDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Sprint snapshots only. YYYY-MM-DD or null: the tracker's Added to Sprint date, i.e. the Jira changelog date on which the ticket entered the sprint (its Created date when there is no Sprint-field entry). Older snapshots may contain dates from before the approximation marker was retired. See DATA_CONTRACT.md section 2a."
+          }
+        },
+        "description": "Fields common to both ticket shapes. Each ticket must also match $defs/sprintTicket or $defs/backlogTicket.",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/sprintTicket"
+          },
+          {
+            "$ref": "#/$defs/backlogTicket"
+          }
+        ]
+      }
+    },
+    "sprint": {
+      "type": "object",
+      "description": "Sprint snapshots only: the sprint's identity and date range, from the Sprint Metrics tab. Not present in backlog.json.",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "Numeric Jira sprint id, parsed from the leading digits of Sprint Metrics' 'Sprint' column."
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Jira sprint name, e.g. 'APP Sprint 10-09-2026'."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "closed"
+          ],
+          "description": "Optional. Written in some frozen snapshots of closed sprints (for example sprint-12119); absent in the active sprint's snapshot and not guaranteed in frozen ones (sprint-12176 has none). The manifest, not this field, decides which sprint is active."
+        },
+        "completeDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "Optional. YYYY-MM-DD the sprint was completed in Jira. Only in some frozen snapshots of closed sprints, like 'state'."
+        },
+        "startDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "YYYY-MM-DD, America/Los_Angeles. Null only before the first af-daily-tracker-jira run populates it."
+        },
+        "endDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "description": "YYYY-MM-DD, America/Los_Angeles. Changes if the sprint is extended."
+        },
+        "carriedOver": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Passthrough of Sprint Metrics' 'Carried Over #', 'Carried Over %' and 'Carried Over Story Points' columns for the active sprint; never recalculated from the ticket list. null (the whole object) means not calculated yet (all three source cells empty), which is different from zero carried over.",
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "percent": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Percent of tickets, 0 to 100."
+            },
+            "storyPoints": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ticketKeys": {
+              "type": "array",
+              "description": "Optional ticket keys for filtering the lower dashboard section to carried-over work items.",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        "removed": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "description": "Tickets that left the sprint (moved to the backlog bucket or a later sprint), from the Removed From Sprint tab (af-jira-changelog-scan pattern 5). Absent or null = not tracked for this sprint; [] = nothing removed.",
+          "items": {
+            "type": "object",
+            "required": [
+              "ticket",
+              "removedDate"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "ticket": {
+                "type": "string"
+              },
+              "removedDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "points": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "addedDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "summary": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Exact Jira issue type captured when the ticket left the sprint; optional for older removed records."
+              },
+              "owner": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tester": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "classifications": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Jira Classifications (customfield_11500), multiple values joined with '; '. null when none set."
+              },
+              "fixVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "parent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Optional free-text caveat about this removal record, for example that it was reconstructed by hand after the sprint closed (present in snapshots/sprint-12119.json). The app does not display it."
+              }
+            }
+          }
+        }
+      }
+    },
+    "velocityHistory": {
+      "type": "object",
+      "description": "Sprint snapshots only, active sprint only (D93). Points and tickets closed inside each of the last closed sprints and the active one, computed by the exporter from the frozen snapshots. Optional.",
+      "required": [
+        "method",
+        "sprints"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "sprints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "startDate",
+              "endDate",
+              "state",
+              "scopeTickets",
+              "scopePoints",
+              "doneTickets",
+              "donePoints",
+              "doneBeforeStartTickets",
+              "doneBeforeStartPoints"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "startDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "endDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "closed"
+                ]
+              },
+              "scopeTickets": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "scopePoints": {
+                "type": "number",
+                "minimum": 0
+              },
+              "doneTickets": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "donePoints": {
+                "type": "number",
+                "minimum": 0
+              },
+              "doneBeforeStartTickets": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "doneBeforeStartPoints": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "averageDonePoints": {
+          "type": "number",
+          "minimum": 0
+        },
+        "averageDoneTickets": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sprintTicket": {
+      "type": "object",
+      "description": "The exact shape of each object in a sprint snapshot's 'tickets' array.",
+      "required": [
+        "ticket"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Assignee display name, preserved verbatim; null when unassigned. The UI groups null, blank and the literal 'Unassigned' as Unassigned."
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Original Jira status, preserved verbatim (To Do, Open, In Progress, In Review, Done, or an unrecognized value — unrecognized values are never dropped or remapped by the exporter). The dashboard UI may choose to display 'Open' as 'To Do'; that is a display-layer decision documented in the skill file, not something this exporter does to the data."
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Exact Jira issue type, preserved verbatim; null when the source tracker has no Type value yet."
+        },
+        "tester": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classifications": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Jira Classifications (customfield_11500), multiple values joined with '; '. null when none set."
+        },
+        "points": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linkedWorkItems": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Exact Jira summary, preserved verbatim; not a plain-language rewrite."
+        },
+        "lastSyncUpdate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Short ticket status and next step, up to about 200 characters; displayed in the sprint ticket detail table."
+        },
+        "blocker": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "demoOrSpike": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Candidate",
+            "Presented",
+            "No",
+            null
+          ],
+          "description": "Demo or spike status: Candidate, Presented, No, or null."
+        },
+        "discussed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "doneDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "addedDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "cycleTime": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Days from start of work to Done. Populated only when status is Done; null for every other ticket by design (the metric does not apply)."
+        },
+        "statusAging": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Whole days the ticket has been in its current status, from the tracker Status Aging column (Done tickets: days since Done Date). Null when the tracker has no usable number."
+        },
+        "statusAgingApprox": {
+          "type": "boolean",
+          "description": "True when statusAging is approximate (tracker value ends in *, meaning days since created)."
+        }
+      }
+    },
+    "backlogTicket": {
+      "type": "object",
+      "description": "The exact shape of each object in backlog.json's 'tickets' array.",
+      "required": [
+        "ticket"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Exact Jira summary, preserved verbatim; not a plain-language rewrite."
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Well-Formed, Weak, Missing, N/A (Epic) (since 2026-10-02; older snapshots used Ready for Well-Formed), null (blank), or an unrecognised value; unrecognised values are preserved verbatim, never dropped."
+        },
+        "points": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "needsSplitting": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "days": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Days in Current Status as a plain integer. A trailing '*' approximation marker in the source cell (e.g. '223*') is stripped; only the number is exported."
+        },
+        "epic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "risk": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quickCheck": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cluster": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        }
+      }
+    }
+  }
+}
